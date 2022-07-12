@@ -10,68 +10,103 @@ md.use(emoji);
 
 const isMobile = /android|Adr|iPhone|iPod|iPad/gi.test(navigator.userAgent) || /android|Adr|iPhone|iPod|iPad/gi.test(navigator.appVersion)
 
+function replaceInput(ele: HTMLTextAreaElement, substr: string, step: number) {
+  const start = ele.selectionStart;
+  const end = ele.selectionEnd;
+  let str;
+  if (start === end) {
+    str = ele.value.slice(0, ele.selectionEnd);
+    str += substr;
+    str += ele.value.slice(ele.selectionEnd);
+    ele.value = str;
+    ele.selectionEnd = end + step;
+    ele.selectionStart = end + step;
+  } else {
+    str = ele.value.slice(0, ele.selectionStart);
+    str += substr;
+    str += ele.value.slice(ele.selectionEnd);
+    ele.value = str;
+    ele.selectionEnd = start + step;
+    ele.selectionStart = start + step;
+  }
+}
+
+function getFrontSpaceNum(ele: HTMLTextAreaElement): number {
+  const end = ele.selectionStart > ele.selectionEnd ? ele.selectionEnd : ele.selectionStart;
+  let str;
+  const substr = ele.value.slice(0, end);
+  const breakIdx = substr.lastIndexOf('\n') + 1;
+  const startLine = substr.slice(breakIdx);
+  const spaceNum = startLine.length - startLine.trimStart().length;
+  return spaceNum;
+}
+
 function App() {
+  const timeline: Array<string> = [];
+  let cur = -1;
   const [value, setValue] = useState('');
   const [data, setData] = useState('');
+  const [combine, setCombine] = useState(false);
   useLayoutEffect(() => {
     Prism.highlightAll();
   })
 
-  const listenValueChange = (element?:HTMLTextAreaElement) => {
+  const listenValueChange = (element?: HTMLTextAreaElement) => {
     const ele = element ? element : document.getElementById('input') as HTMLTextAreaElement;
+    timeline.push(ele.value);
+    cur++;
     setValue(ele.value);
     const str = md.render(ele.value) as string;
     setData(str);
   }
 
   const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    let ele = document.getElementById('input') as HTMLTextAreaElement;
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const start = ele.selectionStart;
-      const end = ele.selectionEnd;
-      let str;
-      if (start === end) {
-        str = ele.value.slice(0, ele.selectionEnd);
-        str += '  ';
-        str += ele.value.slice(ele.selectionEnd);
-        ele.value = str;
-        ele.selectionEnd = end + 2;
-        ele.selectionStart = end + 2;
-      } else {
-        str = ele.value.slice(0, ele.selectionStart);
-        str += '  ';
-        str += ele.value.slice(ele.selectionEnd);
-        ele.value = str;
-        ele.selectionEnd = start + 2;
-        ele.selectionStart = start + 2;
-      }
+    const syntaxObj = {
+      "[": "[]",
+      "(": "()",
+      "'": "''",
+      '"': '""'
     }
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const start = ele.selectionStart;
-      const end = ele.selectionEnd;
-      let str;
-      if (start === end) {
-        str = ele.value.slice(0, ele.selectionEnd);
-        str += '\n';
-        str += ele.value.slice(ele.selectionEnd);
-        ele.value = str;
-        ele.selectionEnd = end + 1;
-        ele.selectionStart = end + 1;
-      } else {
-        str = ele.value.slice(0, ele.selectionStart);
-        str += '\n';
-        str += ele.value.slice(ele.selectionEnd);
-        ele.value = str;
-        ele.selectionEnd = start + 1;
-        ele.selectionStart = start + 1;
-      }
+
+    let ele = document.getElementById('input') as HTMLTextAreaElement;
+    switch (e.key) {
+      case 'Tab':
+        e.preventDefault();
+        replaceInput(ele, '  ', 2);
+        break;
+      case 'Enter':
+        e.preventDefault();
+        replaceInput(ele, `\n${' '.repeat(getFrontSpaceNum(ele))}`, 1 + getFrontSpaceNum(ele));
+        break;
+      case '{':
+        e.preventDefault();
+        replaceInput(ele, `{\n${' '.repeat(getFrontSpaceNum(ele))}}`, 2 + getFrontSpaceNum(ele));
+        break;
+      case '[':
+      case '(':
+      case '"':
+      case "'":
+        e.preventDefault();
+        replaceInput(ele, syntaxObj[e.key], 1);
+        break;
+      case "Control":
+        setCombine(true);
+        break;
+      case "Z":
+        if (combine) {
+          if (cur >= 0) cur--;
+          else break;
+          setValue(timeline[cur]);
+          const str = md.render(timeline[cur]) as string;
+          setData(str);
+          setCombine(false);
+        }
+        break;
     }
     listenValueChange(ele);
   }
 
-  const upload = (e:ChangeEvent<HTMLInputElement>) => {
+  const upload = (e: ChangeEvent<HTMLInputElement>) => {
     const { files } = e.target;
     let file = files?.[0];
     if (!file || !/^(.+)\.md$/.test(file.name)) return;
@@ -104,8 +139,8 @@ function App() {
   }
 
   return (
-    <div className={`App ${isMobile ? 'Mobile': ''}`}>
-      <div className="ViewArea markdown-body" dangerouslySetInnerHTML={{__html: data}}/>
+    <div className={`App ${isMobile ? 'Mobile' : ''}`}>
+      <div className="ViewArea markdown-body" dangerouslySetInnerHTML={{ __html: data }} />
       <div className="InputArea">
         <textarea
           id="input"
